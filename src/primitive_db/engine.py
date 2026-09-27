@@ -1,6 +1,6 @@
 """Interactive loop and dispatch for database commands."""
 
-from src.primitive_db.constants import COMMAND_PROMPT, META_FILE
+from src.primitive_db.constants import COMMAND_PROMPT, ID_COLUMN, META_FILE
 from src.primitive_db.core import (
     column_types,
     create_table,
@@ -12,7 +12,7 @@ from src.primitive_db.core import (
 )
 from src.primitive_db.decorators import handle_db_errors
 from src.primitive_db.parser import (
-    parse_assignment,
+    parse_set,
     parse_values,
     parse_where,
     tokenize,
@@ -72,6 +72,7 @@ def print_rows(columns, rows):
 
 
 def _create_table(args, metadata):
+    """Create and persist a validated table schema."""
     if len(args) < 2:
         raise ValueError("Укажите имя таблицы и хотя бы один столбец.")
     table_name = args[0]
@@ -86,6 +87,7 @@ def _create_table(args, metadata):
 
 
 def _drop_table(args, metadata):
+    """Confirm deletion and remove a table's schema and data file."""
     if len(args) != 1:
         raise ValueError("Укажите одно имя таблицы.")
     table_name = args[0]
@@ -97,6 +99,7 @@ def _drop_table(args, metadata):
 
 
 def _insert(args, metadata):
+    """Parse, validate, and persist one new row."""
     if len(args) < 6 or args[0].lower() != "into" or args[2].lower() != "values":
         raise ValueError("Используйте: insert into <таблица> values (...).")
     table_name = args[1]
@@ -106,12 +109,12 @@ def _insert(args, metadata):
     if changed is None:
         return
     save_table_data(table_name, changed)
-    print(
-        f'Запись с ID={changed[-1]["ID"]} успешно добавлена в таблицу "{table_name}".'
-    )
+    new_id = changed[-1][ID_COLUMN]
+    print(f'Запись с ID={new_id} успешно добавлена в таблицу "{table_name}".')
 
 
 def _select(args, metadata):
+    """Show all rows or rows matching one typed condition."""
     if len(args) < 2 or args[0].lower() != "from":
         raise ValueError("Используйте: select from <таблица> [where ...].")
     table_name = args[1]
@@ -126,20 +129,12 @@ def _select(args, metadata):
 
 
 def _update(args, metadata):
-    if len(args) < 9 or args[1].lower() != "set":
+    """Apply a typed assignment to rows matching a typed condition."""
+    if len(args) != 9 or args[1].lower() != "set" or args[5].lower() != "where":
         raise ValueError("Используйте: update <таблица> set ... where ...")
     table_name = args[0]
-    where_index = next(
-        (index for index, token in enumerate(args) if token.lower() == "where"),
-        -1,
-    )
-    if where_index < 0:
-        raise ValueError("Ожидалось условие where.")
-    schema = column_types(metadata, table_name)
-    changes = parse_assignment(args[2:where_index], schema)
-    if "ID" in changes:
-        raise ValueError("Столбец ID изменять нельзя.")
-    condition = parse_where(args[where_index:], metadata, table_name)
+    changes = parse_set(args[1:5], metadata, table_name)
+    condition = parse_where(args[5:], metadata, table_name)
     current = load_table_data(table_name)
     changed = update(current, changes, condition)
     if changed is None:
@@ -150,6 +145,7 @@ def _update(args, metadata):
 
 
 def _delete(args, metadata):
+    """Confirm deletion and persist the remaining rows."""
     if len(args) < 6 or args[0].lower() != "from":
         raise ValueError("Используйте: delete from <таблица> where ...")
     table_name = args[1]
@@ -163,6 +159,7 @@ def _delete(args, metadata):
 
 
 def _info(args, metadata):
+    """Display schema and current row count for a table."""
     if len(args) != 1:
         raise ValueError("Укажите одно имя таблицы.")
     table_name = args[0]

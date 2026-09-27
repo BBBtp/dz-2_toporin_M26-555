@@ -22,12 +22,14 @@ def handle_db_errors(func):
     return wrapper
 
 
-def confirm_action(action_name):
-    """Require an explicit y before a destructive database action."""
+def confirm_action(action_name, validate=None):
+    """Validate, then require an explicit y before a destructive action."""
 
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
+            if validate is not None:
+                validate(*args, **kwargs)
             answer = input(f'Вы уверены, что хотите выполнить "{action_name}"? [y/n]: ')
             if answer.strip().lower() != "y":
                 print("Операция отменена.")

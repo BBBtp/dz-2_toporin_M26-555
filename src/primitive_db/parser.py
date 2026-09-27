@@ -2,21 +2,53 @@
 
 import shlex
 
+from src.primitive_db.constants import ID_COLUMN
 from src.primitive_db.core import column_types, convert_value
 
 
 def tokenize(command):
-    """Split a command, respecting quotes and punctuation."""
-    lexer = shlex.shlex(command, posix=True, punctuation_chars="=(),")
-    lexer.whitespace_split = True
-    lexer.commenters = ""
+    """Split command syntax while preserving quotes around literal values."""
     tokens = []
-    for token in lexer:
-        if token and all(character in "=()," for character in token):
-            tokens.extend(token)
+    current = []
+    quote = None
+    escaped = False
+
+    def finish_token():
+        if current:
+            tokens.append("".join(current))
+            current.clear()
+
+    for character in command:
+        if quote is not None:
+            current.append(character)
+            if escaped:
+                escaped = False
+            elif character == "\\" and quote == '"':
+                escaped = True
+            elif character == quote:
+                quote = None
+        elif character in ("'", '"'):
+            quote = character
+            current.append(character)
+        elif character in "=(),":
+            finish_token()
+            tokens.append(character)
+        elif character.isspace():
+            finish_token()
         else:
-            tokens.append(token)
+            current.append(character)
+    if quote is not None:
+        raise ValueError("Незакрытая кавычка в команде.")
+    finish_token()
     return tokens
+
+
+def decode_value(token):
+    """Remove shell-style quoting from one literal without losing punctuation."""
+    values = shlex.split(token)
+    if len(values) != 1:
+        raise ValueError(f"Некорректное значение: {token}")
+    return values[0]
 
 
 def parse_values(tokens):
@@ -29,7 +61,7 @@ def parse_values(tokens):
         if expect_value:
             if token in (",", "(", ")"):
                 raise ValueError("Некорректный список значений.")
-            values.append(token)
+            values.append(decode_value(token))
         elif token != ",":
             raise ValueError("Разделите значения запятыми.")
         expect_value = not expect_value
@@ -45,7 +77,7 @@ def parse_assignment(tokens, schema):
     column, _, raw_value = tokens
     if column not in schema:
         raise KeyError(column)
-    return {column: convert_value(raw_value, schema[column])}
+    return {column: convert_value(decode_value(raw_value), schema[column])}
 
 
 def parse_where(tokens, metadata, table_name):
@@ -60,6 +92,6 @@ def parse_set(tokens, metadata, table_name):
     if not tokens or tokens[0].lower() != "set":
         raise ValueError("Ожидалось условие set.")
     assignment = parse_assignment(tokens[1:], column_types(metadata, table_name))
-    if "ID" in assignment:
+    if ID_COLUMN in assignment:
         raise ValueError("Столбец ID изменять нельзя.")
     return assignment

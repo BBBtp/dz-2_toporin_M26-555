@@ -39,6 +39,19 @@ class DatabaseTests(unittest.TestCase):
             self.assertIs(core.drop_table(metadata, "users"), metadata)
         self.assertNotIn("users", metadata)
 
+    def test_missing_table_is_reported_without_confirmation(self):
+        output = io.StringIO()
+        unexpected_prompt = patch(
+            "builtins.input", side_effect=AssertionError("unexpected prompt")
+        )
+        with (
+            unexpected_prompt as ask,
+            contextlib.redirect_stdout(output),
+        ):
+            self.assertIsNone(core.drop_table({}, "missing"))
+        ask.assert_not_called()
+        self.assertIn("missing", output.getvalue())
+
     def test_json_storage(self):
         self.assertEqual(utils.load_metadata("missing.json"), {})
         utils.save_metadata("db_meta.json", {"users": ["ID:int"]})
@@ -91,6 +104,30 @@ class DatabaseTests(unittest.TestCase):
             parser.parse_where(["where", "active", "=", "false"], metadata, "users"),
             {"active": False},
         )
+
+    def test_quoted_punctuation_is_a_value_not_a_separator(self):
+        for literal in (",", "()", "=", "a,b"):
+            with self.subTest(literal=literal):
+                tokens = parser.tokenize(f'insert into items values ("{literal}")')
+                self.assertEqual(parser.parse_values(tokens[4:]), [literal])
+
+    def test_quoted_keyword_in_update(self):
+        metadata = {}
+        with contextlib.redirect_stdout(io.StringIO()):
+            engine.execute_command("create_table users name:str", metadata)
+            engine.execute_command('insert into users values ("Sergei")', metadata)
+            engine.execute_command(
+                'update users set name = "where" where ID = 1', metadata
+            )
+            engine.execute_command('insert into users values (",")', metadata)
+            engine.execute_command("create_table where where:str", metadata)
+            engine.execute_command('insert into where values ("before")', metadata)
+            engine.execute_command(
+                'update where set where = "where" where ID = 1', metadata
+            )
+        self.assertEqual(utils.load_table_data("users")[0]["name"], "where")
+        self.assertEqual(utils.load_table_data("users")[1]["name"], ",")
+        self.assertEqual(utils.load_table_data("where")[0]["where"], "where")
 
     def test_cacher_calls_source_once(self):
         cache = create_cacher()

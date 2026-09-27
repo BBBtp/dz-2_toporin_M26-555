@@ -74,10 +74,9 @@ def create_table(metadata, table_name, columns):
 
 
 @handle_db_errors
-@confirm_action("удаление таблицы")
+@confirm_action("удаление таблицы", validate=schema_for)
 def drop_table(metadata, table_name):
     """Remove an existing table from metadata after confirmation."""
-    schema_for(metadata, table_name)
     del metadata[table_name]
     return metadata
 
