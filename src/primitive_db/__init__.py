@@ -1,0 +1,1 @@
+"""Primitive JSON-backed database."""

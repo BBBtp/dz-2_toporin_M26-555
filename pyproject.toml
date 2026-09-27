@@ -1,0 +1,31 @@
+[project]
+name = "project-2-toporin-m26-555"
+version = "0.1.0"
+description = "Учебная консольная база данных с хранением в JSON"
+authors = [{ name = "Bogdan Toporin" }]
+readme = "README.md"
+requires-python = ">=3.12,<4.0"
+dependencies = ["prompt==0.4.1", "prettytable>=3.18,<4.0"]
+
+[project.scripts]
+project = "src.primitive_db.main:main"
+database = "src.primitive_db.main:main"
+
+[tool.poetry]
+packages = [{ include = "src" }]
+
+[tool.poetry.group.dev.dependencies]
+ruff = ">=0.13,<1.0"
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+exclude = ["venv", ".venv", "dist", "__pycache__"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = []
+
+[build-system]
+requires = ["poetry-core>=2.0,<3.0"]
+build-backend = "poetry.core.masonry.api"
